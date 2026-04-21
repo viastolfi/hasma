@@ -109,6 +109,71 @@ _da_push:
   pop rbx
   ret
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; get element from a da at index i
+;; rdi -> pointer to the DA structure
+;; rsi -> index
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+_da_get:
+  push rbx
+
+  mov rbx, rdi
+  cmp rsi, [rbx + DA.count]
+  jge .fail
+
+  mov rax, rsi
+  imul rax, [rbx + DA.esize]
+  add rax, [rbx + DA.ptr]
+  pop rbx
+  ret
+
+.fail:
+  mov rax, -1
+  pop rbx
+  ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; remove element from da
+;; rdi -> pointer to the DA structure
+;; rsi -> index of the element we want to remove
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+_da_remove:
+  push rbx
+  push r12
+  push r13
+
+  mov rbx, rdi
+  mov r12, rsi
+
+  call _da_get ; since _da_get already checks index out of bound
+  cmp rax, -1
+  je .fail
+
+  mov r13, rax
+
+  mov rdi, r13
+  mov rsi, r13
+  add rsi, [rbx + DA.esize]
+  mov rdx, [rbx + DA.count]
+  sub rdx, r12
+  dec rdx
+  imul rdx, [rbx + DA.esize]
+  call _mem_copy
+
+  dec qword [rbx + DA.count]
+
+  xor rax, rax
+  pop r13
+  pop r12
+  pop rbx
+  ret
+
+.fail:
+  mov rax, -1
+  pop r13
+  pop r12
+  pop rbx
+  ret
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; grow a da
@@ -143,8 +208,8 @@ _da_grow:
   mov r13, rax
   mov [rbx + DA.capacity], r14
 
-  mov rdi, r12
-  mov rsi, r13
+  mov rdi, r13
+  mov rsi, r12
   mov rdx, [rbx + DA.count]
   imul rdx, [rbx + DA.esize]
   call _mem_copy
@@ -177,6 +242,12 @@ _da_grow:
   pop rbx
   ret
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; copy a chunck of memory
+;; rdi -> pointer to the start were we will copy
+;; rsi -> pointer to the start of what we copy
+;; rdx -> amount of bytes we are going to copy
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 _mem_copy:
   cmp rdx, 32
   jl .qwords
@@ -214,4 +285,33 @@ _mem_copy:
 
 .done:
   xor rax, rax
+  ret
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; free a da
+;; rdi -> pointer to the DA structure
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+_da_free:
+  push rbx
+
+  mov rbx, rdi
+  mov rax, 11
+  mov rdi, rbx
+  mov rsi, [rbx + DA.capacity]
+  imul rsi, [rbx + DA.esize]
+  syscall
+
+  cmp rax, -1
+  je .fail
+
+  mov qword [rbx + DA.capacity], 0
+  mov qword [rbx + DA.count], 0
+  mov qword [rbx + DA.esize], 0
+  mov qword [rbx + DA.ptr], 0
+  
+  xor rax, rax
+  pop rbx
+  ret
+.fail:
+  pop rbx
   ret
