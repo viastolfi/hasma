@@ -1,5 +1,5 @@
-%define PROD_READ     0x01
-%define PROD_WRITE    0x02 
+%define PROT_READ     0x01
+%define PROT_WRITE    0x02 
 
 struc DA
   .ptr:        resq 1
@@ -15,19 +15,19 @@ endstruc
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 _da_init:
   push rbx
-  push r11
+  push r12
 
   mov rbx, rdi
-  mov r11, rsi
+  mov r12, rsi
 
   mov rax, 9
   mov rdi, 0
 
   ; allocate 8 * esize bytes in memory
   mov rsi, 8 
-  imul rsi, r11 
+  imul rsi, r12
 
-  mov rdx, PROD_READ | PROD_WRITE
+  mov rdx, PROT_READ | PROT_WRITE
   mov r10, 0x22
   mov r8, -1
   mov r9, 0
@@ -37,18 +37,18 @@ _da_init:
   je .error
 
   mov [rbx + DA.ptr], rax
-  mov [rbx + DA.count], 0
-  mov [rbx + DA.capacity], 8
-  mov [rbx + DA.esize], r11
+  mov qword [rbx + DA.count], 0
+  mov qword [rbx + DA.capacity], 8
+  mov [rbx + DA.esize], r12
 
   xor rax, rax
-  pop r11
+  pop r12
   pop rbx
   ret
  
 .error:
   mov rax, -1
-  pop r11
+  pop r12
   pop rbx
   ret
 
@@ -132,7 +132,7 @@ _da_grow:
   mov rdi, 0
   mov rsi, r14
   imul rsi, [rbx + DA.esize]
-  mov rdx, PROD_READ | PROD_WRITE
+  mov rdx, PROT_READ | PROT_WRITE
   mov r10, 0x22
   mov r8, -1
   mov r9, 0
@@ -153,12 +153,11 @@ _da_grow:
 
   mov [rbx + DA.ptr], r13
 
+  mov rax, 11
   mov rdi, r12
   mov rsi, r15
   imul rsi, [rbx + DA.esize]
-  call _da_free
-  cmp rax, -1
-  je .fail
+  syscall
  
  .done:
   xor rax, rax
@@ -176,4 +175,43 @@ _da_grow:
   pop r13
   pop r12
   pop rbx
+  ret
+
+_mem_copy:
+  cmp rdx, 32
+  jl .qwords
+
+  movdqu xmm0, [rsi]
+  movdqu xmm1, [rsi + 16]
+  movdqu [rdi], xmm0
+  movdqu [rdi + 16], xmm1
+  add rsi, 32
+  add rdi, 32
+  sub rdx, 32
+  jmp _mem_copy
+
+.qwords:
+  cmp rdx, 8
+  jl .bytes
+
+  mov rax, [rsi]
+  mov [rdi], rax
+  add rsi, 8
+  add rdi, 8
+  sub rdx, 8
+  jmp .qwords
+
+.bytes:
+  cmp rdx, 0
+  je .done
+  
+  mov al, byte [rsi]
+  mov byte [rdi], al
+  inc rsi
+  inc rdi
+  dec rdx
+  jmp .bytes
+
+.done:
+  xor rax, rax
   ret
